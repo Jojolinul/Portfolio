@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <link rel="stylesheet" type="text/css" href="astarJS/style.css?v=2.0v">
+    
+    <title>A* PathFind</title>
+</head>
+<body>
+    
+<div id="wrapper_left">
+
+	<canvas id="A*" width="1000" height="1000"></canvas>
+	
+</div>
+
+<div id="wrapper_right">
+    	
+		<button class = "button" onclick="IncreaseHeight()">IncreaseHeight</button>
+		<button class = "button" onclick="DecreaseHeight()">DecreaseHeight</button>
+		<button class = "button" onclick="NewMap()">Make new Map</button>
+		<button class = "button" onclick="StartAI()">Start A*</button>
+		<button class = "button" onclick="StopAI()">Stop A*</button>
+		<button class = "button" onclick="DrawCircles()">Square / Circle</button>
+		<button class = "button" onclick="Allow()">Allow Diagonals</button>
+		<button class = "button" onclick="Reset()">Reset</button>
+		<button class = "button" onclick="Search()">Draw Search Set</button>
+		<div class="dropdown">
+		<a href="javascript:void(0)" class="dropbtn">Select Heuristic</a>
+		  <div class="dropdown-content">
+			<a href="#" onclick="SelectHeuristic(0)">Euclidian Heuristic</a>
+			<a href="#" onclick="SelectHeuristic(1)">Manhattan Heuristic</a>
+			<a href="#" onclick="SelectHeuristic(2)">Optimised Heuristic</a>
+		  </div>
+		</div>
+</div>
+
+<div id="wrapper_right">
+    
+    	<canvas id="Height" width="80" height="720"></canvas>
+    	
+</div>
+
+<div id="wrapper_right">
+    
+    	<canvas id="Info" width="400" height="400"></canvas>
+    	
+</div>
+
+    <script src="astarJS/astar.js"></script>
+    <script src="astarJS/setup.js"></script>
+	
+</body>
+</html>
