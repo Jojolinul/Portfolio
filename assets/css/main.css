@@ -2624,10 +2624,16 @@
 
 	.close:hover { background: #00d9ff; }
 	
-	iframe {
-		width: 50%;
-		height: 315px;
-		margin: 0 auto;
-		display:block;
-		background-color: #777;
+	.iframeC {
+		position: relative;
+		padding-bottom: 35.25%; /* proportion value to aspect ratio 16:9 (9 / 16 = 0.5625 or 56.25%) */
+		height: 0;
+	}
+	
+	.iframeC iframe {
+		position: absolute;
+		display: block;
+		margin: auto;
+		width: 80%;
+		height:100%;
 	}
