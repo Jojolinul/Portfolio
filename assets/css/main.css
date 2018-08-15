@@ -2625,6 +2625,8 @@
 	.close:hover { background: #00d9ff; }
 	
 	iframe {
+		width: 50%;
+		height: 315px;
 		margin: 0 auto;
 		display:block;
 		background-color: #777;
