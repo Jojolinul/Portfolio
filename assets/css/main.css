@@ -2577,9 +2577,10 @@
         top: 0;
         right: 0;
         bottom: 0;
-        left: 0;
+		left: 0;
+
         background: rgba(0,0,0,0.95);
-        z-index: 1;
+		z-index: 1;
 		opacity:0;
 		overflow: auto;
         -webkit-transition: opacity 400ms ease-in;
@@ -2596,7 +2597,8 @@
     .modalDialog > div {
 		width: 80%;
 		height: auto;
-        position: relative;
+		position: relative;
+		padding-bottom: auto;
         margin: 10% auto;
         padding: 5px 20px 13px 20px;
         border-radius: 10px;
@@ -2635,5 +2637,19 @@
 		display: block;
 		margin: auto;
 		width: 100%;
-		height:100%;
+		height: 100%;
+	}
+
+	.modalContent{
+		display: block;
+	}
+
+	.dRow {
+		width: 55%;
+		float: left;
+	}
+
+	.fRow {
+		width: 40%;
+		float: right;
 	}

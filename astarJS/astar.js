@@ -9,8 +9,8 @@ ctx = c.getContext('2d');
 c2 = document.getElementById('Info');
 ctx2 = c2.getContext('2d');
 
-ctx.width = 1000;
-ctx.height = 1000;
+ctx.width = c.width;
+ctx.height = c.height;
 /////////////////////////////////////
 
 var img = new Image();
@@ -715,6 +715,6 @@ function AIMain()
 	}
 	else if (Ending && notFinal)
 	{
-		ctx.drawImage(noPathImg, 0, 0, 1000, 1000);
+		ctx.drawImage(noPathImg, 0, 0, ctx.width, ctx.height);
 	}	  
 }
