@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Adaptive AR/3D Web App</title>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      font-family: Arial, sans-serif;
+    }
+    #debugInfo {
+      position: fixed;
+      top: 10px;
+      width: 100%;
+      text-align: center;
+      z-index: 1;
+      color: white;
+      background-color: rgba(0, 0, 0, 0.5);
+      padding: 5px;
+    }
+    .settingsButton {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      z-index: 10;
+      background-color: rgba(0, 0, 0, 0.5);
+      color: white;
+      border: none;
+      border-radius: 50%;
+      width: 50px;
+      height: 50px;
+      font-size: 24px;
+      cursor: pointer;
+    }
+    .settingsMenu {
+      position: fixed;
+      bottom: 80px;
+      right: 20px;
+      background-color: rgba(0, 0, 0, 0.7);
+      padding: 10px;
+      border-radius: 10px;
+      display: none;
+      z-index: 10;
+    }
+    .settingsMenu button {
+      display: block;
+      margin: 5px 0;
+      width: 100%;
+      padding: 8px;
+      background-color: rgba(255, 255, 255, 0.8);
+      border: none;
+      border-radius: 5px;
+      color: black;
+      cursor: pointer;
+    }
+    .instructions {
+      position: fixed;
+      top: 20px;
+      left: 20px;
+      right: 20px;
+      background-color: rgba(0, 0, 0, 0.7);
+      color: white;
+      padding: 10px;
+      border-radius: 10px;
+      z-index: 10;
+      text-align: center;
+    }
+    #desktopControls {
+      position: fixed;
+      bottom: 20px;
+      left: 20px;
+      background-color: rgba(0, 0, 0, 0.7);
+      padding: 10px;
+      border-radius: 10px;
+      color: white;
+      z-index: 10;
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="instructions" id="instructions"></div>
+  <div id="debugInfo"></div>
+  
+  <button class="settingsButton" id="settingsButton">⚙️</button>
+  <div class="settingsMenu" id="settingsMenu">
+    <button id="rotateXPlus">Rotate X +</button>
+    <button id="rotateXMinus">Rotate X -</button>
+    <button id="rotateYPlus">Rotate Y +</button>
+    <button id="rotateYMinus">Rotate Y -</button>
+    <button id="moveForward">Move Forward</button>
+    <button id="moveBackward">Move Backward</button>
+    <button id="moveLeft">Move Left</button>
+    <button id="moveRight">Move Right</button>
+    <button id="resetPosition">Reset Position</button>
+  </div>
+  
+  <div id="desktopControls">
+    <p>Desktop Controls:</p>
+    <p>WASD - Move Camera</p>
+    <p>Arrow Keys - Rotate Camera</p>
+    <p>Click - Place Model</p>
+    <p>Scroll - Zoom In/Out</p>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script>
+    // Global variables
+    let camera, scene, renderer;
+    let model, video, audioListener, sound;
+    let isModelPlaced = false;
+    let modelLoaded = false;
+    let settingsOpen = false;
+    let isMobile = false;
+    let controls;
+    let ground;
+    let raycaster, mouse;
+    let keyStates = {};
+    
+    // Detect if device is mobile
+    function detectMobile() {
+      return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || 
+             (window.innerWidth <= 800 && window.innerHeight <= 600);
+    }
+    
+    // Initialize the application
+    function init() {
+      isMobile = detectMobile();
+      const debugInfo = document.getElementById('debugInfo');
+      debugInfo.textContent = isMobile ? 'Mobile Mode' : 'Desktop Mode';
+      
+      // Update instructions based on device type
+      const instructions = document.getElementById('instructions');
+      if (isMobile) {
+        instructions.textContent = 'Tap on the screen to place the 3D model';
+        document.getElementById('desktopControls').style.display = 'none';
+      } else {
+        instructions.textContent = 'Click anywhere to place the 3D model';
+        document.getElementById('desktopControls').style.display = 'block';
+      }
+      
+      // Create scene
+      scene = new THREE.Scene();
+      
+      // Create camera
+      camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 1000);
+      camera.position.set(0, 1.6, 0); // Eye level height
+      
+      // Create renderer
+      renderer = new THREE.WebGLRenderer({ antialias: true });
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setPixelRatio(window.devicePixelRatio);
+      renderer.setClearColor(0x000000);
+      document.body.appendChild(renderer.domElement);
+      
+      // Add lighting
+      const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+      scene.add(ambientLight);
+      
+      const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+      directionalLight.position.set(0, 10, 5);
+      scene.add(directionalLight);
+      
+      // Audio listener for spatial audio
+      audioListener = new THREE.AudioListener();
+      camera.add(audioListener);
+      
+      // Setup based on device type
+      if (isMobile) {
+        setupMobileAR();
+      } else {
+        setupDesktopEnvironment();
+      }
+      
+      // Load 3D model
+      loadModel();
+      
+      // Raycaster for object placement
+      raycaster = new THREE.Raycaster();
+      mouse = new THREE.Vector2();
+      
+      // Add event listeners
+      window.addEventListener('resize', onWindowResize);
+      
+      if (isMobile) {
+        window.addEventListener('touchend', onTouchEnd);
+      } else {
+        window.addEventListener('click', onClick);
+        window.addEventListener('keydown', onKeyDown);
+        window.addEventListener('keyup', onKeyUp);
+        window.addEventListener('wheel', onWheel);
+      }
+      
+      // Settings menu interactions
+      document.getElementById('settingsButton').addEventListener('click', toggleSettings);
+      document.getElementById('rotateXPlus').addEventListener('click', () => rotateModel(0.1, 0, 0));
+      document.getElementById('rotateXMinus').addEventListener('click', () => rotateModel(-0.1, 0, 0));
+      document.getElementById('rotateYPlus').addEventListener('click', () => rotateModel(0, 0.1, 0));
+      document.getElementById('rotateYMinus').addEventListener('click', () => rotateModel(0, -0.1, 0));
+      document.getElementById('moveForward').addEventListener('click', () => moveModel(0, 0, -0.1));
+      document.getElementById('moveBackward').addEventListener('click', () => moveModel(0, 0, 0.1));
+      document.getElementById('moveLeft').addEventListener('click', () => moveModel(-0.1, 0, 0));
+      document.getElementById('moveRight').addEventListener('click', () => moveModel(0.1, 0, 0));
+      document.getElementById('resetPosition').addEventListener('click', resetModelPosition);
+      
+      // Start animation loop
+      animate();
+    }
+    
+    // Setup for mobile AR experience
+    function setupMobileAR() {
+      // In a full implementation, you would use WebXR or AR.js here
+      // For now, we'll just setup a fallback that uses the camera feed as background
+      
+      navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+        .then(function(stream) {
+          const videoElement = document.createElement('video');
+          videoElement.srcObject = stream;
+          videoElement.play();
+          
+          const texture = new THREE.VideoTexture(videoElement);
+          scene.background = texture;
+        })
+        .catch(function(err) {
+          console.error('Unable to access the camera/webcam: ', err);
+          document.getElementById('debugInfo').innerHTML = 'Camera access denied. Using fallback mode.';
+          setupDesktopEnvironment(); // Fall back to desktop mode if camera access fails
+        });
+    }
+    
+    // Setup for desktop 3D environment
+    function setupDesktopEnvironment() {
+      // Create a simple environment with a grid floor
+      scene.background = new THREE.Color(0x87CEEB); // Sky blue background
+      
+      // Add ground
+      const groundGeometry = new THREE.PlaneGeometry(50, 50);
+      const groundMaterial = new THREE.MeshStandardMaterial({
+        color: 0x555555,
+        roughness: 0.8,
+        metalness: 0.2
+      });
+      ground = new THREE.Mesh(groundGeometry, groundMaterial);
+      ground.rotation.x = -Math.PI / 2; // Rotate to be horizontal
+      ground.position.y = -0.1;
+      ground.receiveShadow = true;
+      scene.add(ground);
+      
+      // Add grid helper
+      const gridHelper = new THREE.GridHelper(50, 50);
+      scene.add(gridHelper);
+      
+      // Desktop camera controls
+      camera.position.set(0, 1.6, 5); // Position camera at typical eye height
+      camera.lookAt(0, 0, 0);
+    }
+    
+    // Load 3D model
+    function loadModel() {
+      // For demonstration purposes, we'll create a simple model with TV screens
+      // In a real app, you would load a GLB/GLTF model
+      
+      // Create a box to represent the model
+      const modelGroup = new THREE.Group();
+      
+      // Main structure
+      const boxGeometry = new THREE.BoxGeometry(2, 1, 1);
+      const boxMaterial = new THREE.MeshStandardMaterial({ color: 0x666666 });
+      const box = new THREE.Mesh(boxGeometry, boxMaterial);
+      modelGroup.add(box);
+      
+      // Create TV screens
+      const screenGeometry = new THREE.PlaneGeometry(0.8, 0.6);
+      const screenMaterial = new THREE.MeshBasicMaterial({ color: 0x000000 });
+      
+      // Front TV
+      const frontScreen = new THREE.Mesh(screenGeometry, screenMaterial.clone());
+      frontScreen.position.set(0, 0, 0.51);
+      frontScreen.name = "TV_Screen_Front";
+      modelGroup.add(frontScreen);
+      
+      // Back TV
+      const backScreen = new THREE.Mesh(screenGeometry, screenMaterial.clone());
+      backScreen.position.set(0, 0, -0.51);
+      backScreen.rotation.y = Math.PI;
+      backScreen.name = "TV_Screen_Back";
+      modelGroup.add(backScreen);
+      
+      // Create video texture
+      video = document.createElement('video');
+      video.crossOrigin = 'anonymous';
+      video.loop = true;
+      video.muted = true; // Initial muted to comply with autoplay policies
+      
+      // Use a sample video (replace with your actual video URL)
+      video.src = 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4';
+      video.load();
+      
+      const videoTexture = new THREE.VideoTexture(video);
+      
+      // Apply video texture to TV screens
+      frontScreen.material.map = videoTexture;
+      backScreen.material.map = videoTexture;
+      
+      // Setup spatial audio
+      sound = new THREE.PositionalAudio(audioListener);
+      sound.setMediaElementSource(video);
+      sound.setRefDistance(3); // Full volume at 3m
+      sound.setMaxDistance(7); // No volume at 7m
+      sound.setRolloffFactor(1);
+      modelGroup.add(sound);
+      
+      // Hide model until placed
+      modelGroup.visible = false;
+      scene.add(modelGroup);
+      model = modelGroup;
+      modelLoaded = true;
+    }
+    
+    // Place model on mobile touch
+    function onTouchEnd(event) {
+      if (!modelLoaded || settingsOpen) return;
+      
+      event.preventDefault();
+      
+      if (!isModelPlaced) {
+        // In a real AR app with WebXR, we would use hit testing 
+        // For now, just place in front of the camera
+        const position = new THREE.Vector3(0, 0, -3);
+        position.applyMatrix4(new THREE.Matrix4().makeRotationFromEuler(camera.rotation));
+        position.add(camera.position);
+        
+        model.position.copy(position);
+        model.visible = true;
+        
+        // Play video and audio
+        playMedia();
+        
+        isModelPlaced = true;
+        updateInstructions();
+      }
+    }
+    
+    // Place model on desktop click
+    function onClick(event) {
+      if (!modelLoaded || settingsOpen || !ground) return;
+      
+      // Calculate mouse position in normalized device coordinates
+      mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+      mouse.y = - (event.clientY / window.innerHeight) * 2 + 1;
+      
+      // Update the picking ray with the camera and mouse position
+      raycaster.setFromCamera(mouse, camera);
+      
+      // Calculate objects intersecting the picking ray
+      const intersects = raycaster.intersectObject(ground);
+      
+      if (intersects.length > 0 && !isModelPlaced) {
+        // Place the model at the intersection point
+        model.position.copy(intersects[0].point);
+        model.position.y += 0.5; // Lift slightly above ground
+        model.visible = true;
+        
+        // Play video and audio
+        playMedia();
+        
+        isModelPlaced = true;
+        updateInstructions();
+      }
+    }
+    
+    // Play video and audio
+    function playMedia() {
+      if (video) {
+        video.play().then(() => {
+          video.muted = false; // Unmute after user interaction
+          console.log('Video playing');
+        }).catch(err => {
+          console.error('Error playing video:', err);
+        });
+      }
+    }
+    
+    // Update instructions after model placement
+    function updateInstructions() {
+      document.getElementById('instructions').innerHTML = 'Model placed! Use settings ⚙️ to adjust.';
+      setTimeout(() => {
+        document.getElementById('instructions').style.display = 'none';
+      }, 3000);
+    }
+    
+    // Desktop keyboard controls
+    function onKeyDown(event) {
+      keyStates[event.code] = true;
+    }
+    
+    function onKeyUp(event) {
+      keyStates[event.code] = false;
+    }
+    
+    // Desktop mouse wheel zoom
+    function onWheel(event) {
+      if (!isMobile) {
+        // Zoom in/out with mouse wheel
+        camera.position.z += event.deltaY * 0.01;
+      }
+    }
+    
+    // Toggle settings menu
+    function toggleSettings() {
+      settingsOpen = !settingsOpen;
+      document.getElementById('settingsMenu').style.display = settingsOpen ? 'block' : 'none';
+    }
+    
+    // Rotate model
+    function rotateModel(x, y, z) {
+      if (model && isModelPlaced) {
+        model.rotation.x += x;
+        model.rotation.y += y;
+        model.rotation.z += z;
+      }
+    }
+    
+    // Move model
+    function moveModel(x, y, z) {
+      if (model && isModelPlaced) {
+        model.position.x += x;
+        model.position.y += y;
+        model.position.z += z;
+      }
+    }
+    
+    // Reset model position
+    function resetModelPosition() {
+      if (model && isModelPlaced) {
+        if (isMobile) {
+          const position = new THREE.Vector3(0, 0, -3);
+          position.applyMatrix4(new THREE.Matrix4().makeRotationFromEuler(camera.rotation));
+          position.add(camera.position);
+          model.position.copy(position);
+        } else {
+          model.position.set(0, 0.5, -3);
+        }
+        model.rotation.set(0, 0, 0);
+      }
+    }
+    
+    // Handle window resizing
+    function onWindowResize() {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    }
+    
+    // Process keyboard input for desktop mode
+    function processKeyboard() {
+      if (isMobile) return;
+      
+      const moveSpeed = 0.1;
+      const rotSpeed = 0.02;
+      
+      // Movement
+      if (keyStates['KeyW']) {
+        camera.position.z -= moveSpeed;
+      }
+      if (keyStates['KeyS']) {
+        camera.position.z += moveSpeed;
+      }
+      if (keyStates['KeyA']) {
+        camera.position.x -= moveSpeed;
+      }
+      if (keyStates['KeyD']) {
+        camera.position.x += moveSpeed;
+      }
+      
+      // Rotation
+      if (keyStates['ArrowLeft']) {
+        camera.rotation.y += rotSpeed;
+      }
+      if (keyStates['ArrowRight']) {
+        camera.rotation.y -= rotSpeed;
+      }
+      if (keyStates['ArrowUp']) {
+        camera.rotation.x += rotSpeed;
+      }
+      if (keyStates['ArrowDown']) {
+        camera.rotation.x -= rotSpeed;
+      }
+    }
+    
+    // Animation loop
+    function animate() {
+      requestAnimationFrame(animate);
+      
+      // Process keyboard input for desktop
+      processKeyboard();
+      
+      // Update sound distance model based on camera position
+      if (sound && model && isModelPlaced) {
+        const distance = camera.position.distanceTo(model.position);
+        document.getElementById('debugInfo').innerHTML = 
+          (isMobile ? 'Mobile Mode' : 'Desktop Mode') + 
+          ' - Distance to model: ' + distance.toFixed(2) + 'm';
+          
+        // Optional volume visualization
+        const volume = Math.max(0, Math.min(1, 1 - (distance - 3) / 4));
+        sound.setVolume(volume);
+      }
+      
+      renderer.render(scene, camera);
+    }
+    
+    // Start the application when page loads
+    window.onload = init;
+  </script>
+</body>
+</html>
