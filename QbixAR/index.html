@@ -3,69 +3,75 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Adaptive AR/3D Web App</title>
+  <title>Adaptive AR/3D Web App - Fixed Controls</title>
   <style>
     body {
       margin: 0;
       overflow: hidden;
       font-family: Arial, sans-serif;
+      touch-action: none; /* Prevent default touch behaviors */
     }
     #debugInfo {
       position: fixed;
       top: 10px;
       width: 100%;
       text-align: center;
-      z-index: 1;
+      z-index: 100;
       color: white;
       background-color: rgba(0, 0, 0, 0.5);
       padding: 5px;
+      pointer-events: none; /* Allow clicks to pass through */
     }
     .settingsButton {
       position: fixed;
       bottom: 20px;
       right: 20px;
-      z-index: 10;
-      background-color: rgba(0, 0, 0, 0.5);
+      z-index: 1000; /* Increased z-index */
+      background-color: rgba(0, 0, 0, 0.7);
       color: white;
       border: none;
       border-radius: 50%;
-      width: 50px;
-      height: 50px;
-      font-size: 24px;
+      width: 60px; /* Increased size */
+      height: 60px; /* Increased size */
+      font-size: 28px; /* Increased font size */
       cursor: pointer;
+      -webkit-tap-highlight-color: transparent; /* Remove tap highlight on mobile */
     }
     .settingsMenu {
       position: fixed;
-      bottom: 80px;
+      bottom: 90px;
       right: 20px;
-      background-color: rgba(0, 0, 0, 0.7);
-      padding: 10px;
+      background-color: rgba(0, 0, 0, 0.8);
+      padding: 15px;
       border-radius: 10px;
       display: none;
-      z-index: 10;
+      z-index: 1000; /* Increased z-index */
+      min-width: 180px; /* Minimum width */
     }
     .settingsMenu button {
       display: block;
-      margin: 5px 0;
+      margin: 8px 0;
       width: 100%;
-      padding: 8px;
-      background-color: rgba(255, 255, 255, 0.8);
+      padding: 12px; /* Larger buttons */
+      background-color: rgba(255, 255, 255, 0.9);
       border: none;
       border-radius: 5px;
       color: black;
       cursor: pointer;
+      font-size: 16px; /* Larger text */
     }
     .instructions {
       position: fixed;
-      top: 20px;
+      top: 50px;
       left: 20px;
       right: 20px;
       background-color: rgba(0, 0, 0, 0.7);
       color: white;
       padding: 10px;
       border-radius: 10px;
-      z-index: 10;
+      z-index: 100;
       text-align: center;
+      pointer-events: none; /* Allow clicks to pass through */
     }
     #desktopControls {
       position: fixed;
@@ -75,14 +81,31 @@
       padding: 10px;
       border-radius: 10px;
       color: white;
-      z-index: 10;
+      z-index: 100;
       display: none;
+      pointer-events: none; /* Allow clicks to pass through */
+    }
+    #arButton {
+      position: fixed;
+      bottom: 90px;
+      left: 50%;
+      transform: translateX(-50%);
+      padding: 15px 30px;
+      background-color: #4285f4;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      font-size: 18px;
+      font-weight: bold;
+      z-index: 1000;
+      cursor: pointer;
+      display: none; /* Hidden initially */
     }
   </style>
 </head>
 <body>
-  <div class="instructions" id="instructions"></div>
-  <div id="debugInfo"></div>
+  <div class="instructions" id="instructions">Loading...</div>
+  <div id="debugInfo">Initializing...</div>
   
   <button class="settingsButton" id="settingsButton">⚙️</button>
   <div class="settingsMenu" id="settingsMenu">
@@ -97,6 +120,8 @@
     <button id="resetPosition">Reset Position</button>
   </div>
   
+  <button id="arButton">Enter AR</button>
+  
   <div id="desktopControls">
     <p>Desktop Controls:</p>
     <p>WASD - Move Camera</p>
@@ -105,7 +130,6 @@
     <p>Scroll - Zoom In/Out</p>
   </div>
 
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <script>
     // Global variables
     let camera, scene, renderer;
@@ -118,6 +142,11 @@
     let ground;
     let raycaster, mouse;
     let keyStates = {};
+    let xrButton = null;
+    let xrSessionActive = false;
+    let reticle = null;
+    let hitTestSource = null;
+    let hitTestSourceRequested = false;
     
     // Detect if device is mobile
     function detectMobile() {
@@ -134,7 +163,7 @@
       // Update instructions based on device type
       const instructions = document.getElementById('instructions');
       if (isMobile) {
-        instructions.textContent = 'Tap on the screen to place the 3D model';
+        instructions.textContent = 'Initializing AR...';
         document.getElementById('desktopControls').style.display = 'none';
       } else {
         instructions.textContent = 'Click anywhere to place the 3D model';
@@ -149,10 +178,10 @@
       camera.position.set(0, 1.6, 0); // Eye level height
       
       // Create renderer
-      renderer = new THREE.WebGLRenderer({ antialias: true });
+      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
       renderer.setSize(window.innerWidth, window.innerHeight);
       renderer.setPixelRatio(window.devicePixelRatio);
-      renderer.setClearColor(0x000000);
+      renderer.setClearColor(0x000000, 0);
       document.body.appendChild(renderer.domElement);
       
       // Add lighting
@@ -185,7 +214,7 @@
       window.addEventListener('resize', onWindowResize);
       
       if (isMobile) {
-        window.addEventListener('touchend', onTouchEnd);
+        // Mobile specific event listeners handled in setupMobileAR
       } else {
         window.addEventListener('click', onClick);
         window.addEventListener('keydown', onKeyDown);
@@ -193,204 +222,293 @@
         window.addEventListener('wheel', onWheel);
       }
       
-      // Settings menu interactions
-      document.getElementById('settingsButton').addEventListener('click', toggleSettings);
-      document.getElementById('rotateXPlus').addEventListener('click', () => rotateModel(0.1, 0, 0));
-      document.getElementById('rotateXMinus').addEventListener('click', () => rotateModel(-0.1, 0, 0));
-      document.getElementById('rotateYPlus').addEventListener('click', () => rotateModel(0, 0.1, 0));
-      document.getElementById('rotateYMinus').addEventListener('click', () => rotateModel(0, -0.1, 0));
-      document.getElementById('moveForward').addEventListener('click', () => moveModel(0, 0, -0.1));
-      document.getElementById('moveBackward').addEventListener('click', () => moveModel(0, 0, 0.1));
-      document.getElementById('moveLeft').addEventListener('click', () => moveModel(-0.1, 0, 0));
-      document.getElementById('moveRight').addEventListener('click', () => moveModel(0.1, 0, 0));
-      document.getElementById('resetPosition').addEventListener('click', resetModelPosition);
+      // Settings menu interactions - use separate event handling for better touch support
+      const settingsButton = document.getElementById('settingsButton');
+      settingsButton.addEventListener('touchend', function(e) {
+        e.preventDefault(); // Prevent double firing
+        toggleSettings();
+      }, false);
+      settingsButton.addEventListener('click', toggleSettings, false);
+      
+      // Add touchend and click events for all control buttons
+      addButtonEventListeners('rotateXPlus', () => rotateModel(0.1, 0, 0));
+      addButtonEventListeners('rotateXMinus', () => rotateModel(-0.1, 0, 0));
+      addButtonEventListeners('rotateYPlus', () => rotateModel(0, 0.1, 0));
+      addButtonEventListeners('rotateYMinus', () => rotateModel(0, -0.1, 0));
+      addButtonEventListeners('moveForward', () => moveModel(0, 0, -0.1));
+      addButtonEventListeners('moveBackward', () => moveModel(0, 0, 0.1));
+      addButtonEventListeners('moveLeft', () => moveModel(-0.1, 0, 0));
+      addButtonEventListeners('moveRight', () => moveModel(0.1, 0, 0));
+      addButtonEventListeners('resetPosition', resetModelPosition);
       
       // Start animation loop
-      animate();
+      if (!isMobile || !checkXRSupport()) {
+        // Use standard animation loop if not in XR
+        animate();
+      }
+    }
+    
+    // Helper function to add both click and touch events to buttons
+    function addButtonEventListeners(id, callback) {
+      const element = document.getElementById(id);
+      if (element) {
+        element.addEventListener('touchend', function(e) {
+          e.preventDefault(); // Prevent double firing
+          callback();
+        }, false);
+        element.addEventListener('click', callback, false);
+      }
+    }
+    
+    // Check WebXR support
+    function checkXRSupport() {
+      if (navigator.xr && navigator.xr.isSessionSupported) {
+        navigator.xr.isSessionSupported('immersive-ar').then((supported) => {
+          if (supported) {
+            document.getElementById('arButton').style.display = 'block';
+            document.getElementById('instructions').textContent = 'Press "Enter AR" to begin';
+            return true;
+          } else {
+            console.warn('WebXR AR not supported on this device');
+            return false;
+          }
+        });
+      } else {
+        console.warn('WebXR not supported on this browser');
+        return false;
+      }
+      return false;
     }
     
     // Setup for mobile AR experience
-    // Full implementation of setupMobileAR using WebXR
-function setupMobileAR() {
-  // Check if WebXR is supported with AR
-  if (navigator.xr && navigator.xr.isSessionSupported) {
-    // Check if AR is supported by the browser
-    navigator.xr.isSessionSupported('immersive-ar').then((supported) => {
-      if (supported) {
-        // Setup WebXR support for Three.js
-        renderer.xr.enabled = true;
-        
-        // Create AR button
-        const arButton = document.createElement('button');
-        arButton.id = 'ar-button';
-        arButton.textContent = 'Enter AR';
-        arButton.style.position = 'fixed';
-        arButton.style.bottom = '80px';
-        arButton.style.left = '50%';
-        arButton.style.transform = 'translateX(-50%)';
-        arButton.style.padding = '12px 24px';
-        arButton.style.border = 'none';
-        arButton.style.borderRadius = '4px';
-        arButton.style.background = '#4285f4';
-        arButton.style.color = 'white';
-        arButton.style.fontWeight = 'bold';
-        arButton.style.zIndex = '10';
-        document.body.appendChild(arButton);
-        
-        // Create controller for AR interactions
-        const controller = renderer.xr.getController(0);
-        controller.addEventListener('select', onARSelect);
-        scene.add(controller);
-        
-        // Add reticle for hit testing
-        const reticleGeometry = new THREE.RingGeometry(0.15, 0.2, 32);
-        reticleGeometry.rotateX(-Math.PI / 2);
-        const reticleMaterial = new THREE.MeshBasicMaterial();
-        const reticle = new THREE.Mesh(reticleGeometry, reticleMaterial);
-        reticle.matrixAutoUpdate = false;
-        reticle.visible = false;
-        scene.add(reticle);
-        
-        // Setup hit testing
-        let hitTestSource = null;
-        let hitTestSourceRequested = false;
-        let modelPlaced = false;
-        
-        // AR session setup
-        arButton.addEventListener('click', () => {
-          navigator.xr.requestSession('immersive-ar', {
-            requiredFeatures: ['hit-test', 'dom-overlay'],
-            domOverlay: { root: document.body }
-          }).then(onSessionStarted);
-        });
-        
-        // AR session start handler
-        function onSessionStarted(session) {
-          session.addEventListener('end', onSessionEnded);
-          
-          renderer.xr.setReferenceSpaceType('local');
-          renderer.xr.setSession(session);
-          
-          document.getElementById('instructions').textContent = 'Scan the floor and tap to place model';
-          
-          // Setup hit testing
-          session.requestReferenceSpace('viewer').then((referenceSpace) => {
-            session.requestHitTestSource({ space: referenceSpace }).then((source) => {
-              hitTestSource = source;
-            });
-          });
-          
-          session.addEventListener('select', () => {
-            if (reticle.visible && !modelPlaced) {
-              // Place model at the reticle position
-              model.position.setFromMatrixPosition(reticle.matrix);
-              model.visible = true;
-              modelPlaced = true;
-              isModelPlaced = true;
-              
-              // Play video and audio
-              playMedia();
-              
-              // Update instructions
-              document.getElementById('instructions').textContent = 'Model placed! Use settings ⚙️ to adjust';
-              setTimeout(() => {
-                document.getElementById('instructions').style.display = 'none';
-              }, 3000);
-            }
-          });
-        }
-        
-        // AR session end handler
-        function onSessionEnded() {
-          hitTestSource = null;
-          hitTestSourceRequested = false;
-          document.getElementById('instructions').textContent = 'AR session ended';
-        }
-        
-        // Add XR frame listener for hit testing
-        renderer.setAnimationLoop(function(timestamp, frame) {
-          if (frame) {
-            // Do hit testing if hit test source is available
-            if (hitTestSource && !modelPlaced) {
-              const referenceSpace = renderer.xr.getReferenceSpace();
-              const hitTestResults = frame.getHitTestResults(hitTestSource);
-              
-              if (hitTestResults.length) {
-                const hit = hitTestResults[0];
-                const pose = hit.getPose(referenceSpace);
-                
-                reticle.visible = true;
-                reticle.matrix.fromArray(pose.transform.matrix);
-              } else {
-                reticle.visible = false;
-              }
-            }
-            
-            // Update audio based on distance
-            if (sound && model && isModelPlaced) {
-              const cameraPosition = new THREE.Vector3();
-              renderer.xr.getCamera().getWorldPosition(cameraPosition);
-              const distance = cameraPosition.distanceTo(model.position);
-              document.getElementById('debugInfo').innerHTML = 'Distance to model: ' + distance.toFixed(2) + 'm';
-              
-              // Optional volume visualization
-              const volume = Math.max(0, Math.min(1, 1 - (distance - 3) / 4));
-              sound.setVolume(volume);
-            }
+    function setupMobileAR() {
+      // Check if WebXR is supported
+      if (navigator.xr && navigator.xr.isSessionSupported) {
+        // Check if immersive-ar mode is supported
+        navigator.xr.isSessionSupported('immersive-ar').then((supported) => {
+          if (supported) {
+            setupWebXR();
+          } else {
+            console.warn('WebXR AR not supported on this device');
+            fallbackToVideoAR();
           }
-          
-          renderer.render(scene, camera);
         });
       } else {
-        console.warn('WebXR AR not supported on this device');
+        console.warn('WebXR not supported on this browser');
         fallbackToVideoAR();
       }
-    });
-  } else {
-    console.warn('WebXR not supported on this browser');
-    fallbackToVideoAR();
-  }
-}
-
-// Fallback to video-based AR when WebXR is not available
-function fallbackToVideoAR() {
-  document.getElementById('debugInfo').innerHTML = 'Using camera-based fallback mode (not true AR)';
-  
-  // Setup for camera background mode (fallback)
-  navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
-    .then(function(stream) {
-      const videoElement = document.createElement('video');
-      videoElement.srcObject = stream;
-      videoElement.play();
+    }
+    
+    // Setup WebXR
+    function setupWebXR() {
+      // Enable XR rendering
+      renderer.xr.enabled = true;
       
-      const texture = new THREE.VideoTexture(videoElement);
-      scene.background = texture;
+      // Set up AR button
+      const arButton = document.getElementById('arButton');
+      arButton.style.display = 'block';
       
-      // For camera-based AR, add a simple tap handler for model placement
-      window.addEventListener('touchend', (event) => {
-        if (!isModelPlaced && modelLoaded) {
-          // Place model in front of camera
-          const position = new THREE.Vector3(0, 0, -3);
-          position.applyMatrix4(new THREE.Matrix4().makeRotationFromEuler(camera.rotation));
-          position.add(camera.position);
-          
-          model.position.copy(position);
-          model.visible = true;
-          
-          // Play video and audio
-          playMedia();
-          
-          isModelPlaced = true;
-          updateInstructions();
-        }
+      // Add both touch and click events to the AR button
+      arButton.addEventListener('touchend', function(e) {
+        e.preventDefault(); // Prevent double events
+        startXRSession();
+      }, false);
+      
+      arButton.addEventListener('click', function() {
+        startXRSession();
+      }, false);
+      
+      // Create a reticle for placement
+      const reticleGeometry = new THREE.RingGeometry(0.15, 0.2, 32);
+      reticleGeometry.rotateX(-Math.PI / 2);
+      const reticleMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff });
+      reticle = new THREE.Mesh(reticleGeometry, reticleMaterial);
+      reticle.matrixAutoUpdate = false;
+      reticle.visible = false;
+      scene.add(reticle);
+      
+      document.getElementById('instructions').textContent = 'Press "Enter AR" to begin';
+    }
+    
+    // Start XR Session
+    function startXRSession() {
+      if (navigator.xr) {
+        navigator.xr.requestSession('immersive-ar', {
+          requiredFeatures: ['hit-test'],
+          optionalFeatures: ['dom-overlay'],
+          domOverlay: { root: document.body }
+        }).then(onXRSessionStarted)
+        .catch(error => {
+          console.error('Error starting XR session:', error);
+          document.getElementById('debugInfo').textContent = 'XR session failed: ' + error.message;
+          fallbackToVideoAR();
+        });
+      }
+    }
+    
+    // Handle XR session start
+    function onXRSessionStarted(session) {
+      xrSessionActive = true;
+      session.addEventListener('end', onXRSessionEnded);
+      
+      // Setup hit testing
+      session.addEventListener('select', onXRSelect);
+      
+      // Configure renderer for XR
+      renderer.xr.setReferenceSpaceType('local');
+      renderer.xr.setSession(session);
+      
+      document.getElementById('instructions').textContent = 'Looking for surfaces...';
+      document.getElementById('arButton').style.display = 'none';
+      
+      // Request hit test source
+      const refSpacePromise = session.requestReferenceSpace('viewer');
+      refSpacePromise.then((referenceSpace) => {
+        session.requestHitTestSource({ space: referenceSpace })
+          .then((source) => {
+            hitTestSource = source;
+          });
       });
-    })
-    .catch(function(err) {
-      console.error('Unable to access the camera/webcam: ', err);
-      document.getElementById('debugInfo').innerHTML = 'Camera access denied. Using desktop mode.';
-      setupDesktopEnvironment(); // Fall back to desktop mode if camera access fails
-    });
-}
+      
+      // Start XR animation loop
+      renderer.setAnimationLoop(renderXR);
+    }
+    
+    // Handle XR session end
+    function onXRSessionEnded() {
+      xrSessionActive = false;
+      hitTestSource = null;
+      hitTestSourceRequested = false;
+      
+      if (reticle) {
+        reticle.visible = false;
+      }
+      
+      document.getElementById('arButton').style.display = 'block';
+      document.getElementById('instructions').textContent = 'AR session ended. Press "Enter AR" to begin again.';
+      
+      // Restart normal animation loop
+      animate();
+    }
+    
+    // Handle XR selection
+    function onXRSelect(event) {
+      if (reticle.visible && !isModelPlaced) {
+        // Place model at the reticle position
+        model.position.setFromMatrixPosition(reticle.matrix);
+        model.visible = true;
+        
+        // Play video and audio
+        if (video) {
+          video.play().then(() => {
+            video.muted = false; // Unmute after user interaction
+          }).catch(err => {
+            console.error('Error playing video:', err);
+          });
+        }
+        
+        isModelPlaced = true;
+        document.getElementById('instructions').textContent = 'Model placed! Use settings ⚙️ to adjust.';
+        setTimeout(() => {
+          document.getElementById('instructions').style.display = 'none';
+        }, 3000);
+      }
+    }
+    
+    // Render XR frame
+    function renderXR(timestamp, frame) {
+      if (frame) {
+        if (hitTestSource && !isModelPlaced) {
+          const referenceSpace = renderer.xr.getReferenceSpace();
+          const hitTestResults = frame.getHitTestResults(hitTestSource);
+          
+          if (hitTestResults.length) {
+            const hit = hitTestResults[0];
+            const pose = hit.getPose(referenceSpace);
+            
+            reticle.visible = true;
+            reticle.matrix.fromArray(pose.transform.matrix);
+            
+            if (document.getElementById('instructions').textContent === 'Looking for surfaces...') {
+              document.getElementById('instructions').textContent = 'Surface found! Tap to place model.';
+            }
+          } else {
+            reticle.visible = false;
+            
+            if (document.getElementById('instructions').textContent === 'Surface found! Tap to place model.') {
+              document.getElementById('instructions').textContent = 'Looking for surfaces...';
+            }
+          }
+        }
+        
+        // Update audio based on distance if model is placed
+        if (sound && model && isModelPlaced) {
+          const cameraPosition = new THREE.Vector3();
+          renderer.xr.getCamera(camera).getWorldPosition(cameraPosition);
+          const distance = cameraPosition.distanceTo(model.position);
+          
+          document.getElementById('debugInfo').textContent = 'Distance to model: ' + distance.toFixed(2) + 'm';
+          
+          // Set volume based on distance
+          const volume = Math.max(0, Math.min(1, 1 - (distance - 3) / 4));
+          sound.setVolume(volume);
+        }
+      }
+      
+      renderer.render(scene, camera);
+    }
+    
+    // Fallback to video-based AR
+    function fallbackToVideoAR() {
+      document.getElementById('debugInfo').textContent = 'Using camera-based fallback mode (not true AR)';
+      
+      // Setup for camera background mode (fallback)
+      navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+        .then(function(stream) {
+          const videoElement = document.createElement('video');
+          videoElement.srcObject = stream;
+          videoElement.play();
+          
+          const texture = new THREE.VideoTexture(videoElement);
+          scene.background = texture;
+          
+          document.getElementById('instructions').textContent = 'Tap on the screen to place the model';
+          
+          // Add touch event for model placement
+          window.addEventListener('touchend', onMobileTouchEnd, false);
+        })
+        .catch(function(err) {
+          console.error('Unable to access the camera/webcam: ', err);
+          document.getElementById('debugInfo').textContent = 'Camera access denied. Using desktop mode.';
+          setupDesktopEnvironment(); // Fall back to desktop mode if camera access fails
+        });
+    }
+    
+    // Mobile touch handler for fallback mode
+    function onMobileTouchEnd(event) {
+      if (!modelLoaded || settingsOpen || isModelPlaced) return;
+      event.preventDefault();
+      
+      // Place model in front of camera
+      const position = new THREE.Vector3(0, 0, -3);
+      model.position.copy(position);
+      model.visible = true;
+      
+      // Play video and audio
+      if (video) {
+        video.play().then(() => {
+          video.muted = false; // Unmute after user interaction
+        }).catch(err => {
+          console.error('Error playing video:', err);
+        });
+      }
+      
+      isModelPlaced = true;
+      document.getElementById('instructions').textContent = 'Model placed! Use settings ⚙️ to adjust.';
+      setTimeout(() => {
+        document.getElementById('instructions').style.display = 'none';
+      }, 3000);
+    }
     
     // Setup for desktop 3D environment
     function setupDesktopEnvironment() {
@@ -481,33 +599,9 @@ function fallbackToVideoAR() {
       modelLoaded = true;
     }
     
-    // Place model on mobile touch
-    function onTouchEnd(event) {
-      if (!modelLoaded || settingsOpen) return;
-      
-      event.preventDefault();
-      
-      if (!isModelPlaced) {
-        // In a real AR app with WebXR, we would use hit testing 
-        // For now, just place in front of the camera
-        const position = new THREE.Vector3(0, 0, -3);
-        position.applyMatrix4(new THREE.Matrix4().makeRotationFromEuler(camera.rotation));
-        position.add(camera.position);
-        
-        model.position.copy(position);
-        model.visible = true;
-        
-        // Play video and audio
-        playMedia();
-        
-        isModelPlaced = true;
-        updateInstructions();
-      }
-    }
-    
-    // Place model on desktop click
+    // Desktop click handler
     function onClick(event) {
-      if (!modelLoaded || settingsOpen || !ground) return;
+      if (!modelLoaded || settingsOpen || !ground || isModelPlaced) return;
       
       // Calculate mouse position in normalized device coordinates
       mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
@@ -519,38 +613,27 @@ function fallbackToVideoAR() {
       // Calculate objects intersecting the picking ray
       const intersects = raycaster.intersectObject(ground);
       
-      if (intersects.length > 0 && !isModelPlaced) {
+      if (intersects.length > 0) {
         // Place the model at the intersection point
         model.position.copy(intersects[0].point);
         model.position.y += 0.5; // Lift slightly above ground
         model.visible = true;
         
         // Play video and audio
-        playMedia();
+        if (video) {
+          video.play().then(() => {
+            video.muted = false; // Unmute after user interaction
+          }).catch(err => {
+            console.error('Error playing video:', err);
+          });
+        }
         
         isModelPlaced = true;
-        updateInstructions();
+        document.getElementById('instructions').textContent = 'Model placed! Use settings ⚙️ to adjust.';
+        setTimeout(() => {
+          document.getElementById('instructions').style.display = 'none';
+        }, 3000);
       }
-    }
-    
-    // Play video and audio
-    function playMedia() {
-      if (video) {
-        video.play().then(() => {
-          video.muted = false; // Unmute after user interaction
-          console.log('Video playing');
-        }).catch(err => {
-          console.error('Error playing video:', err);
-        });
-      }
-    }
-    
-    // Update instructions after model placement
-    function updateInstructions() {
-      document.getElementById('instructions').innerHTML = 'Model placed! Use settings ⚙️ to adjust.';
-      setTimeout(() => {
-        document.getElementById('instructions').style.display = 'none';
-      }, 3000);
     }
     
     // Desktop keyboard controls
@@ -598,10 +681,7 @@ function fallbackToVideoAR() {
     function resetModelPosition() {
       if (model && isModelPlaced) {
         if (isMobile) {
-          const position = new THREE.Vector3(0, 0, -3);
-          position.applyMatrix4(new THREE.Matrix4().makeRotationFromEuler(camera.rotation));
-          position.add(camera.position);
-          model.position.copy(position);
+          model.position.set(0, 0, -3);
         } else {
           model.position.set(0, 0.5, -3);
         }
@@ -652,8 +732,10 @@ function fallbackToVideoAR() {
       }
     }
     
-    // Animation loop
+    // Standard animation loop
     function animate() {
+      if (xrSessionActive) return; // Don't run this loop if XR is active
+      
       requestAnimationFrame(animate);
       
       // Process keyboard input for desktop
@@ -662,7 +744,7 @@ function fallbackToVideoAR() {
       // Update sound distance model based on camera position
       if (sound && model && isModelPlaced) {
         const distance = camera.position.distanceTo(model.position);
-        document.getElementById('debugInfo').innerHTML = 
+        document.getElementById('debugInfo').textContent = 
           (isMobile ? 'Mobile Mode' : 'Desktop Mode') + 
           ' - Distance to model: ' + distance.toFixed(2) + 'm';
           
@@ -674,8 +756,20 @@ function fallbackToVideoAR() {
       renderer.render(scene, camera);
     }
     
-    // Start the application when page loads
-    window.onload = init;
+    // Load Three.js dynamically
+    function loadScript(url, callback) {
+      const script = document.createElement('script');
+      script.type = 'text/javascript';
+      script.src = url;
+      script.onload = callback;
+      document.head.appendChild(script);
+    }
+    
+    // Start loading dependencies
+    loadScript('https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js', function() {
+      // Initialize app once Three.js is loaded
+      init();
+    });
   </script>
 </body>
 </html>
