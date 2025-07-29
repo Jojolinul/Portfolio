@@ -56,6 +56,37 @@
 		box-sizing: border-box;
 	}
 
+	#portfolio .video-container {
+		display: flex;
+		flex-wrap: wrap;
+		justify-content: center; /* ⬅️ Centers the iframes horizontally */
+		gap: 1rem;
+	  }
+	
+	  .video-wrapper {
+		position: relative;
+		width: 45%;            /* Each video takes 50% of the container */
+		padding-top: 25.125%;  /* 16:9 aspect ratio for 50% width */
+		height: 0;
+	  }
+	
+	  .video-wrapper iframe {
+		position: absolute;
+		top: 0;
+		left: 0;
+		width: 100%;
+		height: 100%;
+		border: 0;
+	  }
+	
+	  /* Optional: make the layout stack on small screens */
+	  @media (max-width: 768px) {
+		.video-wrapper {
+		  width: 100%;
+		  padding-top: 56.25%; /* Full-width 16:9 ratio */
+		}
+	  }
+
 /* Containers */
 
 	.container {
